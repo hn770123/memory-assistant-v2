@@ -9,7 +9,7 @@
  LLM(Ollama)  
  MCP(Python)  
  SQLite  
- Whisper  
+ faster-Whisper  
 
 ## 概要
  文字入力、もしくは音声入力に応答するアシスタント  
