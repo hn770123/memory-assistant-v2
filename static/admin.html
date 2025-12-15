@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI秘書 - DB管理</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="admin-page">
+    <div class="container admin-container">
+        <header>
+            <h1>記憶データベース管理</h1>
+            <div class="controls">
+                <a href="/" style="text-decoration:none;">
+                    <button class="secondary">チャットに戻る</button>
+                </a>
+            </div>
+        </header>
+
+        <div style="padding: 20px;">
+            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                <select id="category-filter" style="padding: 8px; border-radius: 4px;">
+                    <option value="">全てのカテゴリ</option>
+                    <option value="attribute">属性 (Attribute)</option>
+                    <option value="goal">目標 (Goal)</option>
+                    <option value="request">要望 (Request)</option>
+                    <option value="memory">記憶 (Memory)</option>
+                </select>
+                <button onclick="loadMemories()">更新</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ID</th>
+                            <th style="width: 100px;">カテゴリ</th>
+                            <th>内容</th>
+                            <th style="width: 150px;">作成日時</th>
+                            <th style="width: 120px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="memories-body">
+                        <!-- Rows rendered here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal (Simplified: Prompt based interaction usually, but let's do a simple overlay or just inline replace?) 
+         For simplicity, I will stick to Delete for now, or prompt() for edit. 
+    -->
+
+    <script>
+        const tbody = document.getElementById('memories-body');
+        const filter = document.getElementById('category-filter');
+
+        async function loadMemories() {
+            const cat = filter.value;
+            const url = cat ? `/api/memories?category=${cat}` : '/api/memories';
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            tbody.innerHTML = '';
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.id}</td>
+                    <td><span class="badge ${item.category}">${item.category}</span></td>
+                    <td>${item.content}</td>
+                    <td>${new Date(item.created_at).toLocaleString()}</td>
+                    <td>
+                        <button class="action-btn secondary" onclick="editMemory(${item.id}, '${item.category}', '${item.content.replace(/'/g, "\\'")}')">編集</button>
+                        <button class="action-btn delete-btn" onclick="deleteMemory(${item.id})">削除</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function deleteMemory(id) {
+            if (!confirm('本当に削除しますか？')) return;
+            await fetch(`/api/memories/${id}`, { method: 'DELETE' });
+            loadMemories();
+        }
+
+        async function editMemory(id, oldCat, oldContent) {
+            const newContent = prompt("内容を編集:", oldContent);
+            if (newContent === null) return;
+
+            // Allow category change? Maybe simple prompt for now
+            const newCat = prompt("カテゴリ (attribute, goal, request, memory):", oldCat);
+            if (newCat === null) return;
+
+            await fetch(`/api/memories/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: newCat, content: newContent })
+            });
+            loadMemories();
+        }
+
+        filter.addEventListener('change', loadMemories);
+        loadMemories();
+    </script>
+</body>
+
+</html>

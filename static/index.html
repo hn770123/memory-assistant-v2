@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI秘書</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI秘書</h1>
+            <div class="controls">
+                <div class="switch-container">
+                    <span>テストモード</span>
+                    <label class="switch">
+                        <input type="checkbox" id="test-mode-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <!-- Admin Link -->
+                <a href="/admin" style="text-decoration:none;">
+                    <button class="secondary">DB管理</button>
+                </a>
+            </div>
+        </header>
+        
+        <div id="chat-area" class="chat-area">
+            <div class="message ai">
+                こんにちは。AI秘書です。何かお手伝いすることはありますか？
+            </div>
+        </div>
+
+        <div id="debug-panel"></div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="メッセージを入力..." autocomplete="off">
+            <button id="send-btn">送信</button>
+        </div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chat-area');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const testModeToggle = document.getElementById('test-mode-toggle');
+        const debugPanel = document.getElementById('debug-panel');
+
+        function appendMessage(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', role);
+            msgDiv.innerText = text;
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Clear input
+            userInput.value = '';
+            appendMessage('user', text);
+
+            const isTestMode = testModeToggle.checked;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, test_mode: isTestMode })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    appendMessage('ai', data.response);
+
+                    if (isTestMode && data.context_used) {
+                        debugPanel.style.display = 'block';
+                        debugPanel.innerText = "--- SYSTEM PROMPT & CONTEXT ---\n" + data.context_used;
+                    } else if (!isTestMode) {
+                        debugPanel.style.display = 'none';
+                    }
+                } else {
+                    appendMessage('ai', 'エラーが発生しました。');
+                }
+            } catch (e) {
+                appendMessage('ai', '通信エラーが発生しました。');
+                console.error(e);
+            }
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        testModeToggle.addEventListener('change', (e) => {
+             if (!e.target.checked) debugPanel.style.display = 'none';
+        });
+
+    </script>
+</body>
+</html>
