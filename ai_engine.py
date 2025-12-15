@@ -115,7 +115,7 @@ class AIEngine:
 
         # 4. バックグラウンドタスクの実行 -> 変更: テストモードでログを表示するためAwaitします
         # analysis_log: { "prompt": str, "response": str }
-        analysis_log = await self.analyze_and_save(user_input, result_text)
+        analysis_log = await self.analyze_and_save(user_input)
         
         return {
             "response": result_text,
@@ -126,15 +126,19 @@ class AIEngine:
         }
 
     # 会話を分析して記憶すべき情報を抽出するメソッド
-    async def analyze_and_save(self, user_text, assistant_text):
+    async def analyze_and_save(self, user_text):
         # 情報を抽出するための専用プロンプト
         # JSON形式での出力を強制することで、プログラムでの処理を容易にします。
+        # AIの応答は含めず、ユーザーの発言のみを対象とします。
         prompt = f"""
-以下のユーザーとAIの会話から、長期的に保存すべきユーザーの情報（属性、目標、記憶、アシスタントへの要望）を抽出してください。
+以下のユーザーの入力から、長期的に保存すべきユーザーの情報（属性、目標、記憶、アシスタントへの要望）を抽出してください。
 保存すべき情報がない場合は、"items": [] としてください。
 JSON形式のみで出力してください。Markdownのコードブロックは不要です。
 
-フォーマット:
+重要: 以下の「フォーマット例」に記載されている内容（プログラマーである、Pythonをマスターしたい等）は、あくまで形式の例です。
+実際の入力に含まれていない限り、絶対に出力に含めないでください。
+
+フォーマット例:
 {{
     "items": [
         {{ "category": "attribute", "content": "ユーザーはプログラマーである" }},
@@ -145,9 +149,8 @@ JSON形式のみで出力してください。Markdownのコードブロック�
 
 有効なカテゴリ: attribute (属性), goal (目標), memory (一般記憶), request (要望)
 
-[会話]
-User: {user_text}
-AI: {assistant_text}
+[ユーザーの入力]
+{user_text}
 """
         result_log = {"prompt": prompt, "response": "", "parsed": None}
 
