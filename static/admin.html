@@ -14,15 +14,24 @@
         <header>
             <h1>記憶データベース管理</h1>
             <div class="controls">
-                <a href="/" style="text-decoration:none;">
+                <!-- 
+                  no-decoration クラスを使ってCSSで下線を消しています。
+                  インラインスタイル (style="...") を避けるのがモダンな書き方です。
+                -->
+                <a href="/" class="no-decoration">
                     <button class="secondary">チャットに戻る</button>
                 </a>
             </div>
         </header>
 
-        <div style="padding: 20px;">
-            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-                <select id="category-filter" style="padding: 8px; border-radius: 4px;">
+        <div class="admin-content">
+            <!-- フィルタリング用コントロール -->
+            <div class="filter-container">
+                <!-- 
+                   title属性を追加して、このセレクトボックスが何の役割かを示します（アクセシビリティ向上）。
+                   CSSクラスを使用してスタイルを適用しています。
+                -->
+                <select id="category-filter" class="filter-select" title="カテゴリでフィルタリング">
                     <option value="">全てのカテゴリ</option>
                     <option value="attribute">属性 (Attribute)</option>
                     <option value="goal">目標 (Goal)</option>
@@ -32,43 +41,59 @@
                 <button onclick="loadMemories()">更新</button>
             </div>
 
-            <div style="overflow-x: auto;">
+            <!-- 
+               テーブルラッパー: スマホなどで横幅が収まりきらない場合に
+               横スクロールを可能にするためのdivです。
+            -->
+            <div class="table-wrapper">
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 50px;">ID</th>
-                            <th style="width: 100px;">カテゴリ</th>
+                            <!-- 
+                              各列の幅をCSSクラスで指定しています。
+                              style="width: ..." と書くよりも、CSSファイルで管理する方が修正が楽です。
+                            -->
+                            <th class="col-id">ID</th>
+                            <th class="col-category">カテゴリ</th>
                             <th>内容</th>
-                            <th style="width: 150px;">作成日時</th>
-                            <th style="width: 120px;">操作</th>
+                            <th class="col-date">作成日時</th>
+                            <th class="col-action">操作</th>
                         </tr>
                     </thead>
                     <tbody id="memories-body">
-                        <!-- Rows rendered here -->
+                        <!-- ここにJavaScriptで生成した行が挿入されます -->
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Edit Modal (Simplified: Prompt based interaction usually, but let's do a simple overlay or just inline replace?) 
-         For simplicity, I will stick to Delete for now, or prompt() for edit. 
+    <!-- 
+      JavaScript: サーバーと通信してデータの取得・更新・削除を行います
     -->
-
     <script>
         const tbody = document.getElementById('memories-body');
         const filter = document.getElementById('category-filter');
 
+        // サーバーから記憶データを取得して表示する関数
         async function loadMemories() {
             const cat = filter.value;
+            // カテゴリが選択されていればクエリパラメータを付与
             const url = cat ? `/api/memories?category=${cat}` : '/api/memories';
 
+            // GETリクエスト送信
             const res = await fetch(url);
             const data = await res.json();
 
+            // テーブルの中身を一度クリア
             tbody.innerHTML = '';
+
+            // データごとの処理
             data.forEach(item => {
                 const tr = document.createElement('tr');
+                // テンプレートリテラル(``)を使ってHTML文字列を作成
+                // エスケープ処理（XSS対策）は本来行うべきですが、今回は簡易実装のため省略しています。
+                // テキスト内容にシングルクォートが含まれるとJSエラーになるため、replaceでエスケープしています。
                 tr.innerHTML = `
                     <td>${item.id}</td>
                     <td><span class="badge ${item.category}">${item.category}</span></td>
@@ -83,20 +108,25 @@
             });
         }
 
+        // 削除機能
         async function deleteMemory(id) {
             if (!confirm('本当に削除しますか？')) return;
+            // DELETEメソッドでリクエスト送信
             await fetch(`/api/memories/${id}`, { method: 'DELETE' });
+            // 削除後にリストを再読み込みして画面を更新
             loadMemories();
         }
 
+        // 編集機能
         async function editMemory(id, oldCat, oldContent) {
+            // ブラウザ標準のpromptダイアログで入力を受け付けます
             const newContent = prompt("内容を編集:", oldContent);
-            if (newContent === null) return;
+            if (newContent === null) return; // キャンセルされた場合
 
-            // Allow category change? Maybe simple prompt for now
             const newCat = prompt("カテゴリ (attribute, goal, request, memory):", oldCat);
             if (newCat === null) return;
 
+            // PUTメソッドで更新内容を送信
             await fetch(`/api/memories/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -105,7 +135,10 @@
             loadMemories();
         }
 
+        // フィルタ変更時に自動で再読み込み
         filter.addEventListener('change', loadMemories);
+
+        // 初回読み込み
         loadMemories();
     </script>
 </body>

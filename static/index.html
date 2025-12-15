@@ -1,17 +1,32 @@
+<!-- 
+  DOCTYPE宣言: ブラウザにこれがHTML5文書であることを伝えます。
+  これにより、ブラウザは標準モードでレンダリングを行います。
+-->
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
+    <!-- 文字コードの設定: UTF-8を指定することで日本語の文字化けを防ぎます -->
     <meta charset="UTF-8">
+    <!-- ビューポート設定: モバイルデバイスでの表示を最適化します -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI秘書</title>
+    <title>AIアシスタント</title>
+    <!-- 外部CSSファイルの読み込み: デザイン（スタイル）を別ファイルで管理します -->
     <link rel="stylesheet" href="/static/style.css">
+    <!-- Google Fontsの読み込み: Interフォントを使用して見た目を整えます -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
+    <!-- 
+      コンテナ: アプリケーションのメイン画面を囲む枠です。
+      CSSで中央寄せやグラスモーフィズム（すりガラス効果）を適用しています。
+    -->
     <div class="container">
         <header>
-            <h1>AI秘書</h1>
+            <h1>AIアシスタント</h1>
             <div class="controls">
+                <!-- トグルスイッチ: 通常モードとテストモードを切り替えます -->
                 <div class="switch-container">
                     <span>テストモード</span>
                     <label class="switch">
@@ -19,53 +34,86 @@
                         <span class="slider"></span>
                     </label>
                 </div>
-                <!-- Admin Link -->
+                <!-- 
+                  DB管理画面へのリンク 
+                  style属性（インラインスタイル）は避けるのがベストプラクティスですが、
+                  ここでは簡易的に装飾を消すために使用しています。
+                -->
                 <a href="/admin" style="text-decoration:none;">
                     <button class="secondary">DB管理</button>
                 </a>
             </div>
         </header>
-        
+
+        <!-- 
+          チャットエリア: メッセージが表示される場所です。
+          JavaScriptでこの中に要素（メッセージ）を追加していきます。
+          id="chat-area" を使ってJSからこの要素を取得します。
+        -->
         <div id="chat-area" class="chat-area">
             <div class="message ai">
                 こんにちは。AI秘書です。何かお手伝いすることはありますか？
             </div>
         </div>
 
+        <!-- デバッグパネル: テストモード時にシステム内部の情報（プロンプト等）を表示します -->
         <div id="debug-panel"></div>
 
+        <!-- 入力エリア -->
         <div class="input-area">
+            <!-- 
+              autocomplete="off": ブラウザの入力履歴が出ないようにします 
+              placeholder: 入力欄が空の時に表示されるヒントテキスト
+            -->
             <input type="text" id="user-input" placeholder="メッセージを入力..." autocomplete="off">
             <button id="send-btn">送信</button>
         </div>
     </div>
 
+    <!-- 
+      JavaScript: ページの動作（ロジック）を記述します。
+      通常は別ファイル（script.jsなど）に分けることが多いですが、
+      小規模なアプリのためここに記述しています。
+    -->
     <script>
+        // HTML要素（DOM）への参照を取得
+        // getElementByIdを使って、id属性で要素を特定します。
         const chatArea = document.getElementById('chat-area');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const testModeToggle = document.getElementById('test-mode-toggle');
         const debugPanel = document.getElementById('debug-panel');
 
+        // 画面にメッセージを追加する関数
         function appendMessage(role, text) {
+            // 新しい div 要素を作成
             const msgDiv = document.createElement('div');
+            // クラスを追加してスタイルを適用（.message と .user または .ai）
             msgDiv.classList.add('message', role);
+            // テキストを設定（innerTextを使うことでHTMLタグのエスケープ処理も兼ねる）
             msgDiv.innerText = text;
+            // チャットエリアに追加
             chatArea.appendChild(msgDiv);
+            // 最新のメッセージが見えるように一番下までスクロール
             chatArea.scrollTop = chatArea.scrollHeight;
         }
 
+        // メッセージを送信する非同期関数
         async function sendMessage() {
-            const text = userInput.value.trim();
-            if (!text) return;
+            const text = userInput.value.trim(); // 前後の空白を除去
+            if (!text) return; // 空なら何もしない
 
-            // Clear input
+            // 入力欄をクリア
             userInput.value = '';
+            // 自分のメッセージを画面に表示
             appendMessage('user', text);
 
             const isTestMode = testModeToggle.checked;
 
             try {
+                // Fetch APIを使ってサーバーにデータを送信（POSTリクエスト）
+                // 非同期処理（await）なので、レスポンスが返ってくるまでここで待ちますが、
+                // ブラウザ自体はフリーズしません。
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -73,9 +121,12 @@
                 });
 
                 if (response.ok) {
+                    // レスポンスをJSONとしてパース
                     const data = await response.json();
+                    // AIの応答を表示
                     appendMessage('ai', data.response);
 
+                    // テストモードならデバッグ情報を表示
                     if (isTestMode && data.context_used) {
                         debugPanel.style.display = 'block';
                         debugPanel.innerText = "--- SYSTEM PROMPT & CONTEXT ---\n" + data.context_used;
@@ -91,15 +142,20 @@
             }
         }
 
+        // イベントリスナーの設定
+        // ボタンクリック時
         sendBtn.addEventListener('click', sendMessage);
+        // エンターキーが押された時にも送信するようにする
         userInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
-        
+
+        // テストモードがOFFになったらデバッグパネルを隠す
         testModeToggle.addEventListener('change', (e) => {
-             if (!e.target.checked) debugPanel.style.display = 'none';
+            if (!e.target.checked) debugPanel.style.display = 'none';
         });
 
     </script>
 </body>
+
 </html>

@@ -1,3 +1,9 @@
+/* 
+  :root 疑似クラス
+  CSS変数（カスタムプロパティ）を定義します。
+  ここで定義した色は var(--bg-color) のように呼び出せます。
+  一箇所で色を管理できるため、テーマ変更などが容易になります。
+*/
 :root {
     --bg-color: #f0f2f5;
     --chat-bg: #ffffff;
@@ -11,52 +17,76 @@
 }
 
 body {
+    /* システムフォントスタック: OSに標準搭載されているフォントを優先順に使用します */
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background-color: var(--bg-color);
     margin: 0;
     padding: 0;
+    /* Flexboxレイアウト: 上下左右中央寄せにします */
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    /* ビューポート（画面）の高さ100% */
     color: var(--text-color);
+    /* 背景グラデーション設定 */
     background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
     background-size: 400% 400%;
+    /* 定義したアニメーション 'gradient' を15秒かけて無限ループ再生 */
     animation: gradient 15s ease infinite;
 }
 
+/* @keyframes: アニメーションのキーフレーム（動きの流れ）を定義 */
 @keyframes gradient {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
 }
 
 .container {
     width: 90%;
     max-width: 800px;
     height: 90vh;
+    /* Glassmorphism（すりガラス）効果の核となる設定 */
     background: var(--glass-bg);
-    backdrop-filter: blur(8px);
+    /* 半透明の背景 */
     -webkit-backdrop-filter: blur(8px);
+    /* Safari用ベンダープレフィックス */
+    backdrop-filter: blur(8px);
+    /* 背景をぼかす */
     border-radius: 20px;
     border: 1px solid var(--glass-border);
     box-shadow: var(--shadow);
+    /* 子要素の配置設定 */
     display: flex;
     flex-direction: column;
+    /* 縦並び */
     overflow: hidden;
+    /* はみ出した部分は隠す */
 }
 
 header {
     padding: 20px;
-    border-bottom: 1px solid rgba(0,0,0,0.05);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    /* 薄い下線 */
     display: flex;
     justify-content: space-between;
+    /* 両端揃え */
     align-items: center;
 }
 
 h1 {
     margin: 0;
     font-size: 1.5rem;
+    /* rem: ルート要素の文字サイズに対する相対値 */
     font-weight: 700;
     color: #333;
 }
@@ -64,6 +94,7 @@ h1 {
 .controls {
     display: flex;
     gap: 10px;
+    /* 要素間の隙間 */
     align-items: center;
 }
 
@@ -75,12 +106,15 @@ button {
     border-radius: 20px;
     cursor: pointer;
     font-size: 0.9rem;
+    /* トランジション: 状態変化を滑らかにする */
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
+/* ホバー時の挙動 */
 button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    /* 少し上に浮き上がる */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 button.secondary {
@@ -91,8 +125,10 @@ button.secondary {
 
 .chat-area {
     flex: 1;
+    /* 残りのスペースを全て埋める */
     padding: 20px;
     overflow-y: auto;
+    /* 縦スクロールを有効に */
     display: flex;
     flex-direction: column;
     gap: 15px;
@@ -105,32 +141,44 @@ button.secondary {
     line-height: 1.5;
     position: relative;
     word-wrap: break-word;
+    /* 長い単語を折り返す */
     animation: fadeIn 0.3s ease;
+    /* フェードインアニメーション */
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
+/* ユーザーのメッセージ（右寄せ、青背景） */
 .message.user {
     align-self: flex-end;
     background: var(--primary-gradient);
     color: white;
     border-bottom-right-radius: 4px;
+    /* 右下の角だけ尖らせる */
 }
 
+/* AIのメッセージ（左寄せ、白背景） */
 .message.ai {
     align-self: flex-start;
     background: white;
     color: #333;
     border-bottom-left-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
 .input-area {
     padding: 20px;
-    background: rgba(255,255,255,0.8);
+    background: rgba(255, 255, 255, 0.8);
     display: flex;
     gap: 10px;
     align-items: center;
@@ -138,12 +186,14 @@ button.secondary {
 
 input[type="text"] {
     flex: 1;
+    /* 横幅いっぱいに広がる */
     padding: 12px 20px;
     border-radius: 25px;
     border: 1px solid #ddd;
     outline: none;
+    /* フォーカス時のデフォルト枠線を消す */
     font-size: 1rem;
-    background: rgba(255,255,255,0.9);
+    background: rgba(255, 255, 255, 0.9);
     transition: border-color 0.3s;
 }
 
@@ -159,58 +209,58 @@ input[type="text"]:focus {
     color: #666;
 }
 
-/* Toggle Switch */
+/* Toggle Switch Styling */
 .switch {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 20px;
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
 }
 
-.switch input { 
-  opacity: 0;
-  width: 0;
-  height: 0;
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
 .slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  -webkit-transition: .4s;
-  transition: .4s;
-  border-radius: 34px;
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 34px;
 }
 
 .slider:before {
-  position: absolute;
-  content: "";
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background-color: white;
-  -webkit-transition: .4s;
-  transition: .4s;
-  border-radius: 50%;
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%;
 }
 
-input:checked + .slider {
-  background: var(--primary-gradient);
+input:checked+.slider {
+    background: var(--primary-gradient);
 }
 
-input:focus + .slider {
-  box-shadow: 0 0 1px #2196F3;
+input:focus+.slider {
+    box-shadow: 0 0 1px #2196F3;
 }
 
-input:checked + .slider:before {
-  -webkit-transform: translateX(20px);
-  -ms-transform: translateX(20px);
-  transform: translateX(20px);
+input:checked+.slider:before {
+    -webkit-transform: translateX(20px);
+    -ms-transform: translateX(20px);
+    transform: translateX(20px);
 }
 
 /* Debug / Test Mode Panel */
@@ -225,19 +275,22 @@ input:checked + .slider:before {
     overflow-y: auto;
     border-top: 1px solid #555;
     white-space: pre-wrap;
+    /* 改行をそのまま表示 */
 }
 
 /* Admin Table */
 table {
     width: 100%;
     border-collapse: collapse;
+    /* 枠線を重ねて表示 */
     background: white;
     border-radius: 8px;
     overflow: hidden;
     font-size: 0.9em;
 }
 
-th, td {
+th,
+td {
     padding: 12px 15px;
     text-align: left;
     border-bottom: 1px solid #eee;
@@ -260,10 +313,25 @@ tr:hover {
     text-transform: uppercase;
 }
 
-.badge.attribute { background: #e3f2fd; color: #1565c0; }
-.badge.goal { background: #e8f5e9; color: #2e7d32; }
-.badge.request { background: #fff3e0; color: #ef6c00; }
-.badge.memory { background: #f3e5f5; color: #7b1fa2; }
+.badge.attribute {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.badge.goal {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.badge.request {
+    background: #fff3e0;
+    color: #ef6c00;
+}
+
+.badge.memory {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
 
 .action-btn {
     padding: 4px 8px;
@@ -277,9 +345,11 @@ tr:hover {
 
 /* Admin specific overrides */
 body.admin-page {
-    background: #f4f6f9; /* Simpler background for admin */
+    background: #f4f6f9;
+    /* Simpler background for admin */
     animation: none;
 }
+
 .admin-container {
     width: 95%;
     max-width: 1000px;
@@ -288,4 +358,44 @@ body.admin-page {
     background: white;
     padding: 30px;
     overflow: visible;
+}
+
+/* Utility Classes for Admin page (to avoid inline styles) */
+.no-decoration {
+    text-decoration: none;
+}
+
+.admin-content {
+    padding: 20px;
+}
+
+.filter-container {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.filter-select {
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+}
+
+.col-id {
+    width: 50px;
+}
+
+.col-category {
+    width: 100px;
+}
+
+.col-date {
+    width: 150px;
+}
+
+.col-action {
+    width: 120px;
 }
