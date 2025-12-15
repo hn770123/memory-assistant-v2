@@ -39,6 +39,14 @@
                     <option value="memory">記憶 (Memory)</option>
                 </select>
                 <button onclick="loadMemories()">更新</button>
+                <!-- 
+                    記憶の圧縮ボタン
+                    処理に時間がかかるため、クリック後にローディング表示を行うなどの工夫が必要です。
+                -->
+                <button id="compress-btn" onclick="compressMemories()"
+                    style="background: var(--primary-gradient); color: white; border: none; margin-left: auto;">
+                    記憶を圧縮・統合
+                </button>
             </div>
 
             <!-- 
@@ -137,6 +145,43 @@
 
         // フィルタ変更時に自動で再読み込み
         filter.addEventListener('change', loadMemories);
+
+        // 記憶の圧縮処理
+        async function compressMemories() {
+            if (!confirm('全ての記憶をLLMで整理・圧縮します。時間がかかる場合がありますがよろしいですか？')) return;
+
+            const btn = document.getElementById('compress-btn');
+            const originalText = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = '処理中...';
+
+            try {
+                const res = await fetch('/api/memories/compress', {
+                    method: 'POST'
+                });
+                const result = await res.json();
+
+                if (result.status === 'success') {
+                    let msg = result.message;
+                    if (result.debug_log) {
+                        msg += "\n\n--- 圧縮ログ ---\n";
+                        msg += "[Prompt]\n" + result.debug_log.prompt + "\n\n";
+                        msg += "[LLM Response]\n" + result.debug_log.llm_response;
+                        // コンソールにも出力
+                        console.log("Compression Log:", result.debug_log);
+                    }
+                    alert(msg);
+                    loadMemories(); // 一覧を更新
+                } else {
+                    alert(`エラー: ${result.message}`);
+                }
+            } catch (e) {
+                alert('通信エラーが発生しました: ' + e);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+        }
 
         // 初回読み込み
         loadMemories();

@@ -80,3 +80,14 @@ def update_memory(memory_id, content, category):
     c.execute('UPDATE memories SET content = ?, category = ? WHERE id = ?', (content, category, memory_id))
     conn.commit()
     conn.close()
+
+# 全ての記憶を削除する関数（圧縮機能などで使用）
+# 十分に注意して使用する必要があります。
+def delete_all_memories():
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM memories')
+    # IDの自動採番（AUTOINCREMENT）をリセットする場合（任意）
+    # c.execute('DELETE FROM sqlite_sequence WHERE name="memories"')
+    conn.commit()
+    conn.close()

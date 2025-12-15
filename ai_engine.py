@@ -3,7 +3,7 @@ import httpx
 import time
 import json
 import asyncio
-from database import get_memories, add_memory
+from database import get_memories, add_memory, delete_all_memories
 
 # 設定
 # ローカルで動作しているOllamaのAPIエンドポイント
@@ -113,14 +113,16 @@ class AIEngine:
         else:
             self.conversation_active = True
 
-        # 4. バックグラウンドタスクの実行: 会話の分析と保存
-        # ユーザーへの応答を遅らせないよう、Fire-and-forget（投げっぱなし）で実行します。
-        # asyncio.create_task を使うと、現在の処理をブロックせずに別の処理を開始できます。
-        asyncio.create_task(self.analyze_and_save(user_input, result_text))
+        # 4. バックグラウンドタスクの実行 -> 変更: テストモードでログを表示するためAwaitします
+        # analysis_log: { "prompt": str, "response": str }
+        analysis_log = await self.analyze_and_save(user_input, result_text)
         
         return {
             "response": result_text,
-            "context_used": system_prompt if test_mode else None
+            "debug_info": {
+                "chat_messages": messages, # 送信した全メッセージ（システムプロンプト含む）
+                "analysis_log": analysis_log
+            }
         }
 
     # 会話を分析して記憶すべき情報を抽出するメソッド
@@ -147,7 +149,8 @@ JSON形式のみで出力してください。Markdownのコードブロック�
 User: {user_text}
 AI: {assistant_text}
 """
-        
+        result_log = {"prompt": prompt, "response": "", "parsed": None}
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(OLLAMA_API_URL, json={
@@ -160,9 +163,11 @@ AI: {assistant_text}
                 if response.status_code == 200:
                     data = response.json()
                     content = data.get("message", {}).get("content", "")
+                    result_log["response"] = content
                     try:
                         # 文字列としてのJSONをPythonの辞書オブジェクトに変換
                         parsed = json.loads(content)
+                        result_log["parsed"] = parsed
                         if "items" in parsed and isinstance(parsed["items"], list):
                             for item in parsed["items"]:
                                 category = item.get("category")
@@ -173,6 +178,103 @@ AI: {assistant_text}
                                         add_memory(category, content_str)
                     except json.JSONDecodeError:
                         print("Failed to parse JSON from analysis")
+                        result_log["error"] = "Failed to parse JSON from analysis"
+                else:
+                    result_log["error"] = f"LLM error: {response.text}"
         except Exception as e:
             print(f"Analysis failed: {e}")
+            result_log["error"] = str(e)
+        
+        return result_log
+
+    # 記憶の圧縮・統合を行うメソッド
+    # 全ての記憶を読み込み、重複を削除し、要約して再保存します。
+    async def compress_memories(self):
+        # 現在の全ての記憶を取得
+        memories = get_memories()
+        
+        if not memories:
+            return {"status": "no_memories", "message": "記憶がありません。"}
+
+        # 記憶の内容をテキスト化
+        memory_text = json.dumps(memories, ensure_ascii=False, indent=2)
+
+        # 圧縮用のプロンプト
+        prompt = f"""
+以下は、ユーザーに関する蓄積された記憶のリストです。
+これらは重複していたり、断片的な情報が含まれています。
+人間の記憶システムを参考に、以下のルールでこれらを整理・統合・圧縮してください。
+
+ルール:
+1. 重複する情報は一つにまとめる。
+2. 相互に関連する情報は統合する。
+3. 詳細すぎる過去のエピソード記憶は、より抽象的で汎用的な「知識」や「属性」に変換する（要約する）。
+4. 「属性」「目標」「要望」は、最新の状態を反映するようにアップデートする。
+5. 出力はJSON形式のみとする。
+
+[現在の記憶リスト]
+{memory_text}
+
+[出力フォーマット]
+{{
+    "items": [
+        {{ "category": "attribute", "content": "..." }},
+        {{ "category": "goal", "content": "..." }},
+        {{ "category": "memory", "content": "..." }},
+        {{ "category": "request", "content": "..." }}
+    ]
+}}
+"""
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                # タイムアウトを長めに設定（処理量が多いため）
+                response = await client.post(OLLAMA_API_URL, json={
+                    "model": MODEL_NAME,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "format": "json",
+                    "stream": False
+                }, timeout=120.0) 
+
+                if response.status_code == 200:
+                    data = response.json()
+                    content = data.get("message", {}).get("content", "")
+                    
+                    try:
+                        parsed = json.loads(content)
+                        if "items" in parsed and isinstance(parsed["items"], list):
+                            # 圧縮に成功した場合のみDBを更新
+                            
+                            # 1. 既存の記憶を全削除
+                            delete_all_memories()
+                            
+                            # 2. 新しい記憶を追加
+                            count = 0
+                            for item in parsed["items"]:
+                                category = item.get("category")
+                                content_str = item.get("content")
+                                if category and content_str:
+                                    add_memory(category, content_str)
+                                    count += 1
+                            
+                            return {
+                                "status": "success", 
+                                "message": f"圧縮完了: {len(memories)}件 -> {count}件に圧縮されました。",
+                                "old_count": len(memories),
+                                "new_count": count,
+                                "debug_log": { # ログとしてプロンプトとレスポンスを返す
+                                    "prompt": prompt,
+                                    "llm_response": content
+                                }
+                            }
+                        else:
+                            return {"status": "error", "message": "JSON形式が不正です（itemsが見つかりません）。"}
+
+                    except json.JSONDecodeError:
+                        return {"status": "error", "message": "JSONの解析に失敗しました。"}
+                else:
+                    return {"status": "error", "message": f"LLMエラー: {response.text}"}
+
+        except Exception as e:
+            return {"status": "error", "message": f"例外エラー: {str(e)}"}
 

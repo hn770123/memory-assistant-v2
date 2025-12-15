@@ -127,9 +127,25 @@
                     appendMessage('ai', data.response);
 
                     // テストモードならデバッグ情報を表示
-                    if (isTestMode && data.context_used) {
+                    if (isTestMode && data.debug_info) {
                         debugPanel.style.display = 'block';
-                        debugPanel.innerText = "--- SYSTEM PROMPT & CONTEXT ---\n" + data.context_used;
+
+                        let debugText = "--- CHAT PROMPT & CONTEXT ---\n";
+                        data.debug_info.chat_messages.forEach(msg => {
+                            debugText += `[Role: ${msg.role}]\n${msg.content}\n\n`;
+                        });
+
+                        // 記憶分析ログの表示
+                        if (data.debug_info.analysis_log) {
+                            debugText += "\n--- MEMORY ANALYSIS ---\n";
+                            const log = data.debug_info.analysis_log;
+                            debugText += `[Prompt]\n${log.prompt}\n\n`;
+                            if (log.response) debugText += `[LLM Response]\n${log.response}\n\n`;
+                            if (log.error) debugText += `[Error]\n${log.error}\n`;
+                            if (log.parsed) debugText += `[Parsed JSON]\n${JSON.stringify(log.parsed, null, 2)}`;
+                        }
+
+                        debugPanel.innerText = debugText;
                     } else if (!isTestMode) {
                         debugPanel.style.display = 'none';
                     }

@@ -38,7 +38,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    context_used: Optional[str] = None # Noneを許容する項目
+    debug_info: Optional[dict] = None # テストモード用の詳細ログ（プロンプト、分析結果など）
 
 class MemoryItem(BaseModel):
     category: str
@@ -70,7 +70,7 @@ async def chat(request: ChatRequest):
     result = await ai_engine.chat(request.message, request.test_mode)
     return ChatResponse(
         response=result["response"],
-        context_used=result["context_used"]
+        debug_info=result.get("debug_info")
     )
 
 # 記憶データの取得用API
@@ -98,6 +98,13 @@ async def update_memory_item(memory_id: int, item: MemoryUpdate):
 async def delete_memory_item(memory_id: int):
     delete_memory(memory_id)
     return {"status": "success"}
+
+# 記憶の圧縮実行API
+# 管理画面などから手動で呼び出します。
+@app.post("/api/memories/compress")
+async def compress_memories_endpoint():
+    result = await ai_engine.compress_memories()
+    return result
 
 # このファイルが直接実行された場合（python main.py）、サーバーを起動します。
 # uvicornは、FastAPIを動かすための高速なASGIサーバーです。

@@ -29,27 +29,12 @@ body {
     height: 100vh;
     /* ビューポート（画面）の高さ100% */
     color: var(--text-color);
-    /* 背景グラデーション設定 */
-    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-    background-size: 400% 400%;
-    /* 定義したアニメーション 'gradient' を15秒かけて無限ループ再生 */
-    animation: gradient 15s ease infinite;
+    /* 落ち着いた雰囲気の背景に変更 */
+    background: linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%);
+    /* アニメーションを削除 */
 }
 
-/* @keyframes: アニメーションのキーフレーム（動きの流れ）を定義 */
-@keyframes gradient {
-    0% {
-        background-position: 0% 50%;
-    }
-
-    50% {
-        background-position: 100% 50%;
-    }
-
-    100% {
-        background-position: 0% 50%;
-    }
-}
+/* @keyframes gradient 削除済み */
 
 .container {
     width: 90%;
@@ -348,6 +333,10 @@ body.admin-page {
     background: #f4f6f9;
     /* Simpler background for admin */
     animation: none;
+    /* Reset layout for scrolling content */
+    display: block;
+    height: auto;
+    min-height: 100vh;
 }
 
 .admin-container {
