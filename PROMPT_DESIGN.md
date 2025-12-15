@@ -7,7 +7,7 @@
 ## 技術スタック
  Python  
  LLM(Ollama)  
- MCP(Python)  
+ MCP(MCP Python SDK)  
  SQLite  
 
 ## 概要
