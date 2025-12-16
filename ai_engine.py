@@ -3,7 +3,7 @@ import httpx
 import time
 import json
 import asyncio
-from database import get_memories, add_memory, delete_all_memories
+from memory_mcp import memory_mcp_server
 
 # 設定
 # ローカルで動作しているOllamaのAPIエンドポイント
@@ -33,30 +33,18 @@ class AIEngine:
         
         self.last_interaction_time = current_time
         
-        # 1. コンテキスト（長期記憶）の取得
-        # データベースから過去の記憶を取得し、AIに与える情報として整形します。
-        # これにより、AIは過去の会話で得たユーザーの情報を踏まえて応答できるようになります。
-        memories = get_memories()
+        # 1. コンテキスト（長期記憶）の取得 - MCP経由に変更
+        # MCPサーバーからリソースを取得します。
+        formatted_memories = memory_mcp_server.read_resource("memories://active")
         
-        # 各カテゴリごとにリストに振り分け
-        attributes = []
-        goals = []
-        memory_list = []
-        requests = []
+        attributes = [m['content'] for m in formatted_memories["attributes"]]
+        goals = [m['content'] for m in formatted_memories["goals"]]
+        requests = [m['content'] for m in formatted_memories["requests"]]
+        memory_list = [m['content'] for m in formatted_memories["memories"]]
         
-        for m in memories:
-            if m['category'] == 'attribute':
-                attributes.append(m['content'])
-            elif m['category'] == 'goal':
-                goals.append(m['content'])
-            elif m['category'] == 'request':
-                requests.append(m['content'])
-            else:
-                memory_list.append(m['content'])
-
         # システムプロンプトの構築
         # AIに対する「役割」や「振る舞い」を定義する最も重要な指示です。
-        # データベースから取得した記憶（コンテキスト）をここに埋め込みます（RAG: Retrieval-Augmented Generation の一種）。
+        # MCPから取得した記憶（コンテキスト）をここに埋め込みます。
         system_prompt = f"""
 あなたは優秀なAI秘書です。
 ユーザーの入力に対して、以下の情報を踏まえて適切に応答してください。
@@ -83,7 +71,6 @@ class AIEngine:
         
         # 2. Ollama APIの呼び出し
         try:
-            # 非同期クライアントを使用してHTTP POSTリクエストを送信
             async with httpx.AsyncClient() as client:
                 response = await client.post(OLLAMA_API_URL, json={
                     "model": MODEL_NAME,
@@ -178,7 +165,8 @@ JSON形式のみで出力してください。Markdownのコードブロック�
                                 if category and content_str:
                                     # 有効なカテゴリかチェックしてからデータベースに保存
                                     if category in ['attribute', 'goal', 'memory', 'request']:
-                                        add_memory(category, content_str)
+                                        # MCP経由で保存（Tool call）
+                                        memory_mcp_server.call_tool("add_memory", {"category": category, "content": content_str})
                     except json.JSONDecodeError:
                         print("Failed to parse JSON from analysis")
                         result_log["error"] = "Failed to parse JSON from analysis"
@@ -190,94 +178,179 @@ JSON形式のみで出力してください。Markdownのコードブロック�
         
         return result_log
 
-    # 記憶の圧縮・統合を行うメソッド
-    # 全ての記憶を読み込み、重複を削除し、要約して再保存します。
-    async def compress_memories(self):
-        # 現在の全ての記憶を取得
-        memories = get_memories()
+    # 記憶の圧縮・統合を行うメソッド（ストリーミング版）
+    # ステップバイステップで実行し、ログをyieldで返します。
+    async def compress_memories_stream(self):
+        import datetime
         
+        yield json.dumps({"step": "start", "message": "記憶の整理プロセスを開始します..."}) + "\n"
+        
+        # 1. 全記憶の取得 (MCP経由)
+        memories = memory_mcp_server.read_resource("memories://all")
         if not memories:
-            return {"status": "no_memories", "message": "記憶がありません。"}
+            yield json.dumps({"step": "end", "message": "記憶がありません。終了します。"}) + "\n"
+            return
 
-        # 記憶の内容をテキスト化
-        memory_text = json.dumps(memories, ensure_ascii=False, indent=2)
+        # カテゴリごとに処理
+        categories = ['attribute', 'goal', 'request', 'memory']
+        
+        for category in categories:
+            cat_memories = [m for m in memories if m['category'] == category]
+            if not cat_memories:
+                continue
+            
+            yield json.dumps({"step": "category_start", "message": f"\n--- カテゴリ: {category} ({len(cat_memories)}件) の整理を開始 ---"}) + "\n"
 
-        # 圧縮用のプロンプト
-        prompt = f"""
-以下は、ユーザーに関する蓄積された記憶のリストです。
-これらは重複していたり、断片的な情報が含まれています。
-人間の記憶システムを参考に、以下のルールでこれらを整理・統合・圧縮してください。
+            # ---------------------------------------------------------
+            # 3.1 & 3.2: 重複/類似の意味を持つ情報の統合
+            # ---------------------------------------------------------
+            yield json.dumps({"step": "process", "message": "類似した意味を持つ記憶を探索中..."}) + "\n"
+            
+            # リストをJSON化
+            items_json = json.dumps([{"id": m["id"], "content": m["content"]} for m in cat_memories], ensure_ascii=False)
+            
+            prompt_similarity = f"""
+以下の記憶リストから、意味が重複している、または非常に似ている項目のグループを探してください。
+グループがない場合は空のリストを返してください。
 
-ルール:
-1. 重複する情報は一つにまとめる。
-2. 相互に関連する情報は統合する。
-3. 詳細すぎる過去のエピソード記憶は、より抽象的で汎用的な「知識」や「属性」に変換する（要約する）。
-4. 「属性」「目標」「要望」は、最新の状態を反映するようにアップデートする。
-5. 出力はJSON形式のみとする。
+リスト:
+{items_json}
 
-[現在の記憶リスト]
-{memory_text}
-
-[出力フォーマット]
+出力フォーマット(JSON):
 {{
-    "items": [
-        {{ "category": "attribute", "content": "..." }},
-        {{ "category": "goal", "content": "..." }},
-        {{ "category": "memory", "content": "..." }},
-        {{ "category": "request", "content": "..." }}
+    "groups": [
+        [ID1, ID2],
+        [ID3, ID4, ID5]
     ]
 }}
 """
-        
+            groups = await self._call_llm_json(prompt_similarity)
+            
+            if groups and "groups" in groups and groups["groups"]:
+                for group_ids in groups["groups"]:
+                    if len(group_ids) < 2: continue
+                    
+                    # 該当する記憶の内容を取得
+                    targets = [m for m in cat_memories if m["id"] in group_ids]
+                    if len(targets) < 2: continue
+                    
+                    yield json.dumps({"step": "action", "message": f"類似項目を統合します: {[t['content'] for t in targets]}"}) + "\n"
+                    
+                    # 統合プロンプト
+                    contents = "\n".join([f"- {t['content']}" for t in targets])
+                    prompt_merge = f"""
+以下の複数の情報を、意味を損なわない範囲で最も単純で明確な一つの文にまとめてください。
+
+{contents}
+
+出力は統合後の文のみを返してください。JSON不要。
+"""
+                    merged_content = await self._call_llm_text(prompt_merge)
+                    
+                    # DB更新 (MCP経由)
+                    # 古いものを削除
+                    for t in targets:
+                        memory_mcp_server.call_tool("delete_memory", {"id": t["id"]})
+                        # ローカルリストからも削除（以降の処理のため）
+                        cat_memories = [m for m in cat_memories if m["id"] != t["id"]]
+
+                    # 新しいものを追加
+                    memory_mcp_server.call_tool("add_memory", {"category": category, "content": merged_content})
+                    yield json.dumps({"step": "result", "message": f"統合完了 -> {merged_content}"}) + "\n"
+            else:
+                yield json.dumps({"step": "info", "message": "統合すべき類似項目はありませんでした。"}) + "\n"
+
+            # ---------------------------------------------------------
+            # 3.4: 矛盾する内容の整合性チェック
+            # ---------------------------------------------------------
+            # リロード（統合で変わったため）
+            # ここでは簡易的に、現在の cat_memories を見直すのではなく、再度読み込むのが安全だがパフォーマンス上省略し、
+            # 残っているものでチェックします。
+            
+            if len(cat_memories) >= 2:
+                yield json.dumps({"step": "process", "message": "矛盾する内容の探索中..."}) + "\n"
+                items_json = json.dumps([{"id": m["id"], "content": m["content"], "created_at": m["created_at"]} for m in cat_memories], ensure_ascii=False)
+                
+                prompt_contradiction = f"""
+以下の記憶リストの中に、論理的に矛盾する（両立しない）項目のペアはありますか？
+矛盾がある場合、作成日時（created_at）が古い方のIDを指摘してください。
+
+リスト:
+{items_json}
+
+出力フォーマット(JSON):
+{{
+    "contradictions": [
+        {{ "ids": [ID1, ID2], "reason": "矛盾の理由", "older_id": ID1 }}
+    ]
+}}
+矛盾がない場合は "contradictions": []
+"""
+                contradictions = await self._call_llm_json(prompt_contradiction)
+                
+                if contradictions and "contradictions" in contradictions and contradictions["contradictions"]:
+                    for cont in contradictions["contradictions"]:
+                        older_id = cont.get("older_id")
+                        if older_id:
+                            target = next((m for m in cat_memories if m["id"] == older_id), None)
+                            if target:
+                                yield json.dumps({"step": "action", "message": f"矛盾を検出 ({cont.get('reason')})。古い記憶を削除: {target['content']}"}) + "\n"
+                                memory_mcp_server.call_tool("delete_memory", {"id": older_id})
+                                cat_memories = [m for m in cat_memories if m["id"] != older_id]
+                else:
+                    yield json.dumps({"step": "info", "message": "矛盾点は見つかりませんでした。"}) + "\n"
+
+            # ---------------------------------------------------------
+            # 3.3: 長い文章の短縮
+            # ---------------------------------------------------------
+            yield json.dumps({"step": "process", "message": "長い文章の短縮チェック中..."}) + "\n"
+            for m in cat_memories:
+                if len(m["content"]) > 15:
+                    prompt_shorten = f"""
+以下の文を、意味を損なわない範囲でできるだけ短くシンプルに書き直してください。
+元の文の意味が完全に保たれる場合のみ変更してください。
+
+文: {m['content']}
+
+出力は書き直した文のみ。
+"""
+                    shortened = await self._call_llm_text(prompt_shorten)
+                    shortened = shortened.strip()
+                    
+                    if len(shortened) < len(m["content"]) and shortened != m["content"]:
+                         yield json.dumps({"step": "action", "message": f"短縮: {m['content']} -> {shortened}"}) + "\n"
+                         memory_mcp_server.call_tool("update_memory", {"id": m["id"], "content": shortened, "category": category})
+
+        yield json.dumps({"step": "complete", "message": "全ての整理プロセスが完了しました。"}) + "\n"
+
+    # ヘルパー: LLMを呼んでJSONを返す
+    async def _call_llm_json(self, prompt):
         try:
             async with httpx.AsyncClient() as client:
-                # タイムアウトを長めに設定（処理量が多いため）
                 response = await client.post(OLLAMA_API_URL, json={
                     "model": MODEL_NAME,
                     "messages": [{"role": "user", "content": prompt}],
                     "format": "json",
                     "stream": False
-                }, timeout=120.0) 
-
+                }, timeout=120.0)
                 if response.status_code == 200:
-                    data = response.json()
-                    content = data.get("message", {}).get("content", "")
-                    
-                    try:
-                        parsed = json.loads(content)
-                        if "items" in parsed and isinstance(parsed["items"], list):
-                            # 圧縮に成功した場合のみDBを更新
-                            
-                            # 1. 既存の記憶を全削除
-                            delete_all_memories()
-                            
-                            # 2. 新しい記憶を追加
-                            count = 0
-                            for item in parsed["items"]:
-                                category = item.get("category")
-                                content_str = item.get("content")
-                                if category and content_str:
-                                    add_memory(category, content_str)
-                                    count += 1
-                            
-                            return {
-                                "status": "success", 
-                                "message": f"圧縮完了: {len(memories)}件 -> {count}件に圧縮されました。",
-                                "old_count": len(memories),
-                                "new_count": count,
-                                "debug_log": { # ログとしてプロンプトとレスポンスを返す
-                                    "prompt": prompt,
-                                    "llm_response": content
-                                }
-                            }
-                        else:
-                            return {"status": "error", "message": "JSON形式が不正です（itemsが見つかりません）。"}
+                    return json.loads(response.json().get("message", {}).get("content", "{}"))
+        except:
+            return {}
+        return {}
 
-                    except json.JSONDecodeError:
-                        return {"status": "error", "message": "JSONの解析に失敗しました。"}
-                else:
-                    return {"status": "error", "message": f"LLMエラー: {response.text}"}
-
-        except Exception as e:
-            return {"status": "error", "message": f"例外エラー: {str(e)}"}
+    # ヘルパー: LLMを呼んでテキストを返す
+    async def _call_llm_text(self, prompt):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(OLLAMA_API_URL, json={
+                    "model": MODEL_NAME,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False
+                }, timeout=120.0)
+                if response.status_code == 200:
+                    return response.json().get("message", {}).get("content", "")
+        except:
+            return ""
+        return ""
 

@@ -1,8 +1,6 @@
-# FastAPI: 高速でモダンなWeb API構築のためのフレームワーク
-# 非同期処理（async/await）をネイティブにサポートしており、AIのような待ち時間の発生する処理と相性が良いです。
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 # Pydantic: データのバリデーション（検証）や設定管理を行うライブラリ
 # 型ヒントを使って、APIが受け取るデータの形式を定義します。
 from pydantic import BaseModel
@@ -101,10 +99,10 @@ async def delete_memory_item(memory_id: int):
 
 # 記憶の圧縮実行API
 # 管理画面などから手動で呼び出します。
+# ストリーミングレスポンスを返します。
 @app.post("/api/memories/compress")
 async def compress_memories_endpoint():
-    result = await ai_engine.compress_memories()
-    return result
+    return StreamingResponse(ai_engine.compress_memories_stream(), media_type="application/x-ndjson")
 
 # このファイルが直接実行された場合（python main.py）、サーバーを起動します。
 # uvicornは、FastAPIを動かすための高速なASGIサーバーです。
